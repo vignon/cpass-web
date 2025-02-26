@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Static Host List - ClearPass</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <style>
+        .devices-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            table-layout: fixed;
+        }
+        
+        .devices-table, .devices-table th, .devices-table td {
+            border: 1px solid #ddd;
+        }
+        
+        .devices-table th, .devices-table td {
+            padding: 12px;
+            text-align: left;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .devices-table th:nth-child(1) {
+            width: 30%;
+        }
+        
+        .devices-table th:nth-child(2) {
+            width: 40%;
+        }
+        
+        .devices-table th:nth-child(3) {
+            width: 30%;
+        }
+        
+        .devices-table th {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        .devices-table tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        
+        .devices-table tr:hover {
+            background-color: #e6f7ff;
+        }
+        
+        .list-info {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        
+        .list-info h3 {
+            margin-top: 0;
+            color: #3498db;
+        }
+        
+        .list-info dl {
+            display: grid;
+            grid-template-columns: max-content auto;
+            grid-gap: 0.5rem 1rem;
+        }
+        
+        .list-info dt {
+            font-weight: bold;
+            grid-column-start: 1;
+        }
+        
+        .list-info dd {
+            grid-column-start: 2;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top-color: #3498db;
+            animation: spin 1s ease-in-out infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .search-box {
+            margin: 20px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        
+        .search-box input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        
+        .nav-links {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .nav-links a {
+            margin: 0 10px;
+            text-decoration: none;
+            color: #3498db;
+        }
+        
+        .empty-state {
+            padding: 40px;
+            text-align: center;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        
+        .empty-state i {
+            font-size: 48px;
+            color: #ddd;
+            margin-bottom: 20px;
+        }
+        
+        .empty-state h3 {
+            margin-bottom: 10px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>View Static Host List</h1>
+        
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">Add Endpoint</a> | 
+            <a href="{{ url_for('lookup') }}">Lookup Endpoint</a> |
+            <a href="{{ url_for('static_hosts') }}">Search Static Hosts</a> |
+            <a href="{{ url_for('view_static_host_list') }}">View Host List</a> |
+            <a href="{{ url_for('add_to_static_host_list') }}">Add to Host List</a> |
+            <a href="{{ url_for('batch_upload') }}">Batch Upload</a> |
+            <a href="{{ url_for('mpsk_generator') }}">MPSK Generator</a>
+        </div>
+        
+        <div class="card">
+            <h2>View All Devices in Static Host List</h2>
+            
+            <div class="form-group">
+                <label for="host-list">Select Static Host List:</label>
+                <select id="host-list">
+                    <option value="">Loading host lists...</option>
+                </select>
+            </div>
+            
+            <button id="view-button" disabled>View Devices</button>
+            
+            <div id="result-message"></div>
+            
+            <div id="list-details" class="list-info" style="display: none;">
+                <h3>List Information</h3>
+                <dl id="list-info-details"></dl>
+            </div>
+            
+            <div class="search-box" style="display: none;">
+                <input type="text" id="search-input" placeholder="Search devices by MAC address or description...">
+            </div>
+            
+            <div id="loading" style="display: none; text-align: center; margin: 20px 0;">
+                <div class="spinner"></div>
+                <p>Loading devices...</p>
+            </div>
+            
+            <div id="empty-state" class="empty-state" style="display: none;">
+                <h3>No devices found in this host list</h3>
+                <p>This static host list does not contain any devices.</p>
+                <p>
+                    <a href="{{ url_for('add_to_static_host_list') }}">Add a device</a> or 
+                    <a href="{{ url_for('batch_upload') }}">batch upload devices</a> to this list.
+                </p>
+            </div>
+            
+            <table id="devices-table" class="devices-table" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>MAC Address</th>
+                        <th>Description</th>
+                        <th>Other Properties</th>
+                    </tr>
+                </thead>
+                <tbody id="devices-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const hostListSelect = document.getElementById('host-list');
+            const viewButton = document.getElementById('view-button');
+            const resultMessage = document.getElementById('result-message');
+            const loadingElement = document.getElementById('loading');
+            const listDetails = document.getElementById('list-details');
+            const listInfoDetails = document.getElementById('list-info-details');
+            const devicesTable = document.getElementById('devices-table');
+            const devicesBody = document.getElementById('devices-body');
+            const searchBox = document.querySelector('.search-box');
+            const searchInput = document.getElementById('search-input');
+            const emptyState = document.getElementById('empty-state');
+            
+            // Load static host lists when the page loads
+            fetchStaticHostLists();
+            
+            // Function to fetch all static host lists
+            function fetchStaticHostLists() {
+                fetch('/api/static-host-lists')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        populateHostListDropdown(data.data);
+                    } else {
+                        showMessage(`Error: ${data.message}`, 'error');
+                        hostListSelect.innerHTML = '<option value="">Failed to load host lists</option>';
+                    }
+                })
+                .catch(error => {
+                    showMessage(`An error occurred: ${error.message}`, 'error');
+                    hostListSelect.innerHTML = '<option value="">Failed to load host lists</option>';
+                });
+            }
+            
+            // Function to populate the host list dropdown
+            function populateHostListDropdown(hostLists) {
+                // Clear existing options
+                hostListSelect.innerHTML = '';
+                
+                // Add default option
+                const defaultOption = document.createElement('option');
+                defaultOption.value = '';
+                defaultOption.textContent = 'Select a host list...';
+                hostListSelect.appendChild(defaultOption);
+                
+                // Add options for each host list
+                hostLists.forEach(list => {
+                    const option = document.createElement('option');
+                    option.value = list.id;
+                    option.textContent = list.name;
+                    option.dataset.id = list.id;
+                    option.dataset.name = list.name;
+                    hostListSelect.appendChild(option);
+                });
+                
+                // If there are no host lists, show a message
+                if (hostLists.length === 0) {
+                    hostListSelect.innerHTML = '<option value="">No host lists available</option>';
+                    showMessage('No static host lists found in ClearPass', 'error');
+                    viewButton.disabled = true;
+                } else {
+                    // Enable the view button if a list is selected
+                    hostListSelect.addEventListener('change', function() {
+                        viewButton.disabled = !hostListSelect.value;
+                    });
+                }
+            }
+            
+            // Event listener for the view button
+            viewButton.addEventListener('click', function() {
+                const listId = hostListSelect.value;
+                
+                if (!listId) {
+                    showMessage('Please select a static host list', 'error');
+                    return;
+                }
+                
+                // Show loading state
+                loadingElement.style.display = 'block';
+                devicesTable.style.display = 'none';
+                listDetails.style.display = 'none';
+                searchBox.style.display = 'none';
+                emptyState.style.display = 'none';
+                
+                // Disable the button during the request
+                viewButton.disabled = true;
+                viewButton.textContent = 'Loading...';
+                
+                // Send the request to the API
+                fetch(`/api/view-static-host-list?list_id=${encodeURIComponent(listId)}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Hide loading state
+                    loadingElement.style.display = 'none';
+                    
+                    if (data.success) {
+                        // Show success message
+                        showMessage(data.message, 'success');
+                        
+                        // Populate list details
+                        populateListDetails(data.list_details);
+                        
+                        // Show the list details
+                        listDetails.style.display = 'block';
+                        
+                        // Get the hosts
+                        const hosts = data.hosts || [];
+                        
+                        if (hosts.length > 0) {
+                            // Populate the table
+                            populateDevicesTable(hosts);
+                            
+                            // Show the table and search box
+                            devicesTable.style.display = 'table';
+                            searchBox.style.display = 'block';
+                            
+                            // Set up search functionality
+                            setupSearch(hosts);
+                            
+                            // Hide empty state
+                            emptyState.style.display = 'none';
+                        } else {
+                            // Show empty state
+                            emptyState.style.display = 'block';
+                            
+                            // Hide the table
+                            devicesTable.style.display = 'none';
+                        }
+                    } else {
+                        showMessage(`Error: ${data.message}`, 'error');
+                    }
+                })
+                .catch(error => {
+                    // Hide loading state
+                    loadingElement.style.display = 'none';
+                    showMessage(`An error occurred: ${error.message}`, 'error');
+                })
+                .finally(() => {
+                    // Re-enable the button
+                    viewButton.disabled = false;
+                    viewButton.textContent = 'View Devices';
+                });
+            });
+            
+            // Function to populate list details
+            function populateListDetails(details) {
+                // Clear existing details
+                listInfoDetails.innerHTML = '';
+                
+                // Exclude hosts from the details display
+                const excludeKeys = ['hosts'];
+                
+                // Add each property to the details list
+                for (const key in details) {
+                    if (details.hasOwnProperty(key) && !excludeKeys.includes(key)) {
+                        const dt = document.createElement('dt');
+                        dt.textContent = formatPropertyName(key);
+                        
+                        const dd = document.createElement('dd');
+                        
+                        if (details[key] === null || details[key] === undefined) {
+                            dd.textContent = 'N/A';
+                        } else if (typeof details[key] === 'object') {
+                            dd.textContent = JSON.stringify(details[key]);
+                        } else {
+                            dd.textContent = details[key];
+                        }
+                        
+                        listInfoDetails.appendChild(dt);
+                        listInfoDetails.appendChild(dd);
+                    }
+                }
+            }
+            
+            // Function to populate the devices table
+            function populateDevicesTable(hosts) {
+                // Clear existing rows
+                devicesBody.innerHTML = '';
+                
+                // Add a row for each host
+                hosts.forEach(host => {
+                    const row = document.createElement('tr');
+                    
+                    // MAC Address column
+                    const macCell = document.createElement('td');
+                    macCell.textContent = host.host_address || host.mac_address || 'N/A';
+                    macCell.style.whiteSpace = 'nowrap';
+                    row.appendChild(macCell);
+                    
+                    // Description column
+                    const descCell = document.createElement('td');
+                    descCell.textContent = host.host_address_desc || host.description || 'N/A';
+                    row.appendChild(descCell);
+                    
+                    // Other Properties column
+                    const otherCell = document.createElement('td');
+                    
+                    // Create an object with properties other than mac_address, host_address, description, and host_address_desc
+                    const otherProps = {};
+                    for (const key in host) {
+                        if (host.hasOwnProperty(key) && 
+                            key !== 'mac_address' && 
+                            key !== 'host_address' && 
+                            key !== 'description' && 
+                            key !== 'host_address_desc') {
+                            otherProps[key] = host[key];
+                        }
+                    }
+                    
+                    // Format as a string if there are other properties
+                    if (Object.keys(otherProps).length > 0) {
+                        otherCell.textContent = JSON.stringify(otherProps);
+                    } else {
+                        otherCell.textContent = 'None';
+                    }
+                    
+                    row.appendChild(otherCell);
+                    
+                    // Add data attributes for searching
+                    row.dataset.mac = (host.host_address || host.mac_address || '').toLowerCase();
+                    row.dataset.description = (host.host_address_desc || host.description || '').toLowerCase();
+                    
+                    // Add the row to the table
+                    devicesBody.appendChild(row);
+                });
+            }
+            
+            // Function to set up search functionality
+            function setupSearch(hosts) {
+                searchInput.addEventListener('input', function() {
+                    const query = this.value.toLowerCase().trim();
+                    
+                    // Get all rows
+                    const rows = devicesBody.querySelectorAll('tr');
+                    
+                    // If no query, show all rows
+                    if (!query) {
+                        rows.forEach(row => {
+                            row.style.display = '';
+                        });
+                        return;
+                    }
+                    
+                    // Filter rows based on the query
+                    let matchFound = false;
+                    rows.forEach(row => {
+                        const mac = row.dataset.mac;
+                        const description = row.dataset.description;
+                        
+                        if (mac.includes(query) || description.includes(query)) {
+                            row.style.display = '';
+                            matchFound = true;
+                        } else {
+                            row.style.display = 'none';
+                        }
+                    });
+                    
+                    // Show a message if no matches found
+                    if (!matchFound) {
+                        if (!document.getElementById('no-matches')) {
+                            const noMatchesRow = document.createElement('tr');
+                            noMatchesRow.id = 'no-matches';
+                            const cell = document.createElement('td');
+                            cell.colSpan = 3;
+                            cell.textContent = 'No matches found';
+                            cell.style.textAlign = 'center';
+                            cell.style.padding = '20px';
+                            noMatchesRow.appendChild(cell);
+                            devicesBody.appendChild(noMatchesRow);
+                        }
+                    } else {
+                        const noMatchesRow = document.getElementById('no-matches');
+                        if (noMatchesRow) {
+                            noMatchesRow.remove();
+                        }
+                    }
+                });
+            }
+            
+            // Format property name for display
+            function formatPropertyName(name) {
+                return name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            }
+            
+            // Function to show success or error messages
+            function showMessage(message, type) {
+                resultMessage.textContent = message;
+                resultMessage.className = ''; // Clear previous classes
+                resultMessage.classList.add(type);
+                resultMessage.style.display = 'block';
+                
+                // Hide the message after 5 seconds if it's a success message
+                if (type === 'success') {
+                    setTimeout(() => {
+                        resultMessage.style.display = 'none';
+                        resultMessage.className = '';
+                    }, 5000);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

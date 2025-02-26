@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClearPass MPSK Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <style>
+        .password-container {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f0f8ff;
+            border-radius: 5px;
+            border: 1px solid #b0c4de;
+            display: none;
+        }
+
+        .password-box {
+            font-family: monospace;
+            font-size: 18px;
+            padding: 10px;
+            background-color: #ffffff;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            margin: 10px 0;
+        }
+
+        .nav-links {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .nav-links a {
+            margin: 0 10px;
+            text-decoration: none;
+            color: #3498db;
+        }
+        
+        .error {
+            color: #dc3545;
+            background-color: #f8d7da;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            display: none;
+        }
+        
+        .success {
+            color: #28a745;
+            background-color: #d4edda;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            display: none;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top-color: #3498db;
+            animation: spin 1s ease-in-out infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .copy-btn {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 8px 12px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MPSK Password Generator</h1>
+        
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">Add Endpoint</a> | 
+            <a href="{{ url_for('lookup') }}">Lookup Endpoint</a> |
+            <a href="{{ url_for('static_hosts') }}">Search Static Hosts</a> |
+            <a href="{{ url_for('view_static_host_list') }}">View Host List</a> |
+            <a href="{{ url_for('add_to_static_host_list') }}">Add to Host List</a> |
+            <a href="{{ url_for('batch_upload') }}">Batch Upload</a> |
+            <a href="{{ url_for('mpsk_generator') }}">MPSK Generator</a>
+        </div>
+        
+        <div class="card">
+            <h2>Generate MPSK for New Device</h2>
+            
+            <p>Enter the MAC address and email to register a new device and generate an MPSK password.</p>
+            
+            <div class="form-group">
+                <label for="mac-address">MAC Address:</label>
+                <input type="text" id="mac-address" placeholder="Enter MAC address (e.g., 00:11:22:33:44:55)" required>
+                <small>Format: xx:xx:xx:xx:xx:xx or xx-xx-xx-xx-xx-xx or xxxxxxxxxxxx</small>
+            </div>
+            
+            <div class="form-group">
+                <label for="email">Email Address:</label>
+                <input type="email" id="email" placeholder="Enter your email address" required>
+            </div>
+
+            <div class="form-group">
+                <label for="device-name">Device Name (optional):</label>
+                <input type="text" id="device-name" placeholder="Enter a name for this device">
+                <small>Example: John's iPhone, Living Room TV</small>
+            </div>
+            
+            <button id="generate-btn">Generate MPSK</button>
+            
+            <div id="result-message" class="error"></div>
+            
+            <div id="loading" style="display: none; text-align: center; margin: 20px 0;">
+                <div class="loading"></div>
+                <p>Generating MPSK password...</p>
+            </div>
+            
+            <div id="password-container" class="password-container">
+                <h3>Generated MPSK Password</h3>
+                <p>Use this password to connect your device to the network:</p>
+                <div id="password-display" class="password-box"></div>
+                <button id="copy-btn" class="copy-btn">Copy Password</button>
+                <p><small>This password has been sent to your email address.</small></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const macAddressInput = document.getElementById('mac-address');
+            const emailInput = document.getElementById('email');
+            const deviceNameInput = document.getElementById('device-name');
+            const generateBtn = document.getElementById('generate-btn');
+            const resultMessage = document.getElementById('result-message');
+            const loadingElement = document.getElementById('loading');
+            const passwordContainer = document.getElementById('password-container');
+            const passwordDisplay = document.getElementById('password-display');
+            const copyBtn = document.getElementById('copy-btn');
+            
+            // Function to validate MAC address format
+            function isValidMACAddress(mac) {
+                // Remove separators and check if it's a valid MAC
+                const cleanMac = mac.replace(/[:\-\.]/g, '');
+                
+                // Check if it's a valid length (12 hex characters)
+                if (cleanMac.length !== 12) {
+                    return false;
+                }
+                
+                // Check if it contains only hex characters
+                return /^[0-9A-Fa-f]{12}$/.test(cleanMac);
+            }
+            
+            // Function to validate email
+            function isValidEmail(email) {
+                return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+            }
+            
+            // Add event listener for the generate button
+            generateBtn.addEventListener('click', function() {
+                const macAddress = macAddressInput.value.trim();
+                const email = emailInput.value.trim();
+                const deviceName = deviceNameInput.value.trim();
+                
+                // Validate inputs
+                if (!macAddress) {
+                    showMessage('Please enter a MAC address', 'error');
+                    return;
+                }
+                
+                if (!isValidMACAddress(macAddress)) {
+                    showMessage('Invalid MAC address format. Please use format like 00:11:22:33:44:55 or 001122334455', 'error');
+                    return;
+                }
+                
+                if (!email) {
+                    showMessage('Please enter an email address', 'error');
+                    return;
+                }
+                
+                if (!isValidEmail(email)) {
+                    showMessage('Invalid email format. Please enter a valid email address.', 'error');
+                    return;
+                }
+                
+                // Clear previous results
+                resultMessage.style.display = 'none';
+                passwordContainer.style.display = 'none';
+                
+                // Show loading
+                loadingElement.style.display = 'block';
+                
+                // Prepare data for submission
+                const data = {
+                    mac_address: macAddress,
+                    email: email,
+                    device_name: deviceName || `Device-${macAddress.replace(/[:\-\.]/g, '').slice(-6)}`
+                };
+                
+                // Make the request
+                fetch('/api/generate-mpsk', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Hide loading
+                    loadingElement.style.display = 'none';
+                    
+                    if (data.success) {
+                        // Show the generated password
+                        passwordDisplay.textContent = data.mpsk_password;
+                        passwordContainer.style.display = 'block';
+                        showMessage('MPSK password generated successfully!', 'success');
+                    } else {
+                        showMessage(`Error: ${data.message}`, 'error');
+                    }
+                })
+                .catch(error => {
+                    // Hide loading
+                    loadingElement.style.display = 'none';
+                    showMessage(`An error occurred: ${error.message}`, 'error');
+                });
+            });
+
+            // Copy password button
+            copyBtn.addEventListener('click', function() {
+                const password = passwordDisplay.textContent;
+                navigator.clipboard.writeText(password).then(function() {
+                    showMessage('Password copied to clipboard!', 'success');
+                }, function() {
+                    showMessage('Failed to copy password. Please select and copy manually.', 'error');
+                });
+            });
+            
+            // Function to show success or error messages
+            function showMessage(message, type) {
+                resultMessage.textContent = message;
+                if (type === 'error') {
+                    resultMessage.className = 'error';
+                } else {
+                    resultMessage.className = 'success';
+                }
+                resultMessage.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>

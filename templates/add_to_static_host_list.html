@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add to Static Host List - ClearPass</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <style>
+        .nav-links {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .nav-links a {
+            margin: 0 10px;
+            text-decoration: none;
+            color: #3498db;
+        }
+        
+        .success-panel {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #d4edda;
+            border-radius: 5px;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            display: none;
+        }
+        
+        .success-panel h3 {
+            margin-top: 0;
+            color: #155724;
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .form-row .form-group {
+            flex: 1;
+        }
+        
+        .form-actions {
+            margin-top: 20px;
+            text-align: right;
+        }
+        
+        .validation-message {
+            font-size: 14px;
+            color: #dc3545;
+            display: none;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Add to Static Host List</h1>
+        
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">Add Endpoint</a> | 
+            <a href="{{ url_for('lookup') }}">Lookup Endpoint</a> |
+            <a href="{{ url_for('static_hosts') }}">Search Static Hosts</a> |
+            <a href="{{ url_for('view_static_host_list') }}">View Host List</a> |
+            <a href="{{ url_for('add_to_static_host_list') }}">Add to Host List</a> |
+            <a href="{{ url_for('batch_upload') }}">Batch Upload</a> |
+            <a href="{{ url_for('mpsk_generator') }}">MPSK Generator</a>
+        </div>
+        
+        <div class="card">
+            <h2>Add MAC Address to Static Host List</h2>
+            
+            <div class="form-group">
+                <label for="host-list">Select Static Host List:</label>
+                <select id="host-list">
+                    <option value="">Loading host lists...</option>
+                </select>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="mac-address">MAC Address:</label>
+                    <input type="text" id="mac-address" placeholder="Enter MAC address (e.g., 00:11:22:33:44:55)" required>
+                    <small>Format: xx:xx:xx:xx:xx:xx or xx-xx-xx-xx-xx-xx or xxxxxxxxxxxx</small>
+                    <div id="mac-validation" class="validation-message">Please enter a valid MAC address</div>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="description">Description (optional):</label>
+                <input type="text" id="description" placeholder="Enter a description for this device">
+            </div>
+            
+            <div id="result-message"></div>
+            
+            <div class="form-actions">
+                <button id="add-button" disabled>Add to Host List</button>
+            </div>
+            
+            <div id="success-panel" class="success-panel">
+                <h3>MAC Address Added Successfully</h3>
+                <p>The MAC address has been added to the selected static host list.</p>
+                <p><a href="{{ url_for('view_static_host_list') }}">View all devices in this host list</a></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const hostListSelect = document.getElementById('host-list');
+            const macAddressInput = document.getElementById('mac-address');
+            const descriptionInput = document.getElementById('description');
+            const addButton = document.getElementById('add-button');
+            const resultMessage = document.getElementById('result-message');
+            const successPanel = document.getElementById('success-panel');
+            const macValidation = document.getElementById('mac-validation');
+            
+            // Load static host lists when the page loads
+            fetchStaticHostLists();
+            
+            // Function to validate MAC address format
+            function isValidMACAddress(mac) {
+                // Remove separators and check if it's a valid MAC
+                const cleanMac = mac.replace(/[:\-\.]/g, '');
+                
+                // Check if it's a valid length (12 hex characters)
+                if (cleanMac.length !== 12) {
+                    return false;
+                }
+                
+                // Check if it contains only hex characters
+                return /^[0-9A-Fa-f]{12}$/.test(cleanMac);
+            }
+            
+            // Function to fetch all static host lists
+            function fetchStaticHostLists() {
+                fetch('/api/static-host-lists')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        populateHostListDropdown(data.data);
+                    } else {
+                        showMessage(`Error: ${data.message}`, 'error');
+                        hostListSelect.innerHTML = '<option value="">Failed to load host lists</option>';
+                    }
+                })
+                .catch(error => {
+                    showMessage(`An error occurred: ${error.message}`, 'error');
+                    hostListSelect.innerHTML = '<option value="">Failed to load host lists</option>';
+                });
+            }
+            
+            // Function to populate the host list dropdown
+            function populateHostListDropdown(hostLists) {
+                // Clear existing options
+                hostListSelect.innerHTML = '';
+                
+                // Add default option
+                const defaultOption = document.createElement('option');
+                defaultOption.value = '';
+                defaultOption.textContent = 'Select a host list...';
+                hostListSelect.appendChild(defaultOption);
+                
+                // Add options for each host list
+                hostLists.forEach(list => {
+                    const option = document.createElement('option');
+                    option.value = list.id;
+                    option.textContent = list.name;
+                    option.dataset.id = list.id;
+                    option.dataset.name = list.name;
+                    hostListSelect.appendChild(option);
+                });
+                
+                // If there are no host lists, show a message
+                if (hostLists.length === 0) {
+                    hostListSelect.innerHTML = '<option value="">No host lists available</option>';
+                    showMessage('No static host lists found in ClearPass', 'error');
+                    addButton.disabled = true;
+                } else {
+                    // Enable the add button if inputs are valid
+                    validateForm();
+                }
+            }
+            
+            // Function to validate the form
+            function validateForm() {
+                const listSelected = hostListSelect.value !== '';
+                const macValid = isValidMACAddress(macAddressInput.value.trim());
+                
+                // Show or hide MAC validation message
+                if (macAddressInput.value.trim() && !macValid) {
+                    macValidation.style.display = 'block';
+                } else {
+                    macValidation.style.display = 'none';
+                }
+                
+                // Enable/disable the add button
+                addButton.disabled = !(listSelected && macValid);
+                
+                return listSelected && macValid;
+            }
+            
+            // Event listeners for input changes
+            hostListSelect.addEventListener('change', validateForm);
+            macAddressInput.addEventListener('input', validateForm);
+            
+            // Event listener for the add button
+            addButton.addEventListener('click', function() {
+                if (!validateForm()) {
+                    return;
+                }
+                
+                const listId = hostListSelect.value;
+                const macAddress = macAddressInput.value.trim();
+                const description = descriptionInput.value.trim();
+                
+                // Disable the button during the request
+                addButton.disabled = true;
+                addButton.textContent = 'Adding...';
+                
+                // Hide previous results
+                successPanel.style.display = 'none';
+                
+                // Send the request to the API
+                fetch('/api/add-to-static-host-list', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        list_id: listId,
+                        mac_address: macAddress,
+                        description: description || undefined
+                    }),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage(data.message, 'success');
+                        
+                        // Show success panel
+                        successPanel.style.display = 'block';
+                        
+                        // Clear inputs
+                        macAddressInput.value = '';
+                        descriptionInput.value = '';
+                    } else {
+                        showMessage(`Error: ${data.message}`, 'error');
+                    }
+                })
+                .catch(error => {
+                    showMessage(`An error occurred: ${error.message}`, 'error');
+                })
+                .finally(() => {
+                    // Re-enable the button
+                    addButton.disabled = false;
+                    addButton.textContent = 'Add to Host List';
+                    
+                    // Re-validate form
+                    validateForm();
+                });
+            });
+            
+            // Function to show success or error messages
+            function showMessage(message, type) {
+                resultMessage.textContent = message;
+                resultMessage.className = ''; // Clear previous classes
+                resultMessage.classList.add(type);
+                resultMessage.style.display = 'block';
+                
+                // Hide the message after 5 seconds if it's a success message
+                if (type === 'success') {
+                    setTimeout(() => {
+                        resultMessage.style.display = 'none';
+                        resultMessage.className = '';
+                    }, 5000);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

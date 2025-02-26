@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClearPass Endpoint Manager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>ClearPass Endpoint Manager</h1>
+        
+        <div class="nav-links" style="text-align: center; margin-bottom: 20px;">
+            <a href="{{ url_for('index') }}">Add Endpoint</a> | 
+            <a href="{{ url_for('lookup') }}">Lookup Endpoint</a> |
+            <a href="{{ url_for('static_hosts') }}">Search Static Hosts</a> |
+            <a href="{{ url_for('view_static_host_list') }}">View Host List</a> |
+            <a href="{{ url_for('add_to_static_host_list') }}">Add to Host List</a> |
+            <a href="{{ url_for('batch_upload') }}">Batch Upload</a> |
+            <a href="{{ url_for('mpsk_generator') }}">MPSK Generator</a>
+        </div>
+        
+        <div class="card">
+            <h2>Add New Endpoint</h2>
+            <div class="form-group">
+                <label for="mac-address">MAC Address:</label>
+                <input type="text" id="mac-address" placeholder="Enter MAC address (e.g., 00:11:22:33:44:55)" required>
+                <small>Format: xx:xx:xx:xx:xx:xx or xx-xx-xx-xx-xx-xx or xxxxxxxxxxxx</small>
+            </div>
+            <button id="add-button">Add Endpoint</button>
+            
+            <div id="result-message"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

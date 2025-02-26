@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClearPass Endpoint Lookup</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <style>
+        .json-viewer {
+            margin-top: 20px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            padding: 15px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 500px;
+            overflow-y: auto;
+            display: none;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            display: none;
+        }
+        
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: left;
+        }
+        
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        
+        .view-toggle {
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .view-toggle button {
+            margin-right: 10px;
+            background-color: #6c757d;
+        }
+        
+        .view-toggle button.active {
+            background-color: #3498db;
+        }
+        
+        .nav-links {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .nav-links a {
+            margin: 0 10px;
+            text-decoration: none;
+            color: #3498db;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ClearPass Endpoint Lookup</h1>
+        
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">Add Endpoint</a> | 
+            <a href="{{ url_for('lookup') }}">Lookup Endpoint</a> |
+            <a href="{{ url_for('static_hosts') }}">Search Static Hosts</a> |
+            <a href="{{ url_for('view_static_host_list') }}">View Host List</a> |
+            <a href="{{ url_for('add_to_static_host_list') }}">Add to Host List</a> |
+            <a href="{{ url_for('batch_upload') }}">Batch Upload</a> |
+            <a href="{{ url_for('mpsk_generator') }}">MPSK Generator</a>
+        </div>
+        
+        <div class="card">
+            <h2>Lookup Endpoint Details</h2>
+            <div class="form-group">
+                <label for="mac-address">MAC Address:</label>
+                <input type="text" id="mac-address" placeholder="Enter MAC address (e.g., 00:11:22:33:44:55)" required>
+                <small>Format: xx:xx:xx:xx:xx:xx or xx-xx-xx-xx-xx-xx or xxxxxxxxxxxx</small>
+            </div>
+            <button id="lookup-button">Lookup Endpoint</button>
+            
+            <div id="result-message"></div>
+            
+            <div class="view-toggle" id="view-toggle">
+                <button id="table-view-btn" class="active">Table View</button>
+                <button id="json-view-btn">JSON View</button>
+            </div>
+            
+            <table id="endpoint-table"></table>
+            <div id="json-viewer" class="json-viewer"></div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const macAddressInput = document.getElementById('mac-address');
+            const lookupButton = document.getElementById('lookup-button');
+            const resultMessage = document.getElementById('result-message');
+            const endpointTable = document.getElementById('endpoint-table');
+            const jsonViewer = document.getElementById('json-viewer');
+            const viewToggle = document.getElementById('view-toggle');
+            const tableViewBtn = document.getElementById('table-view-btn');
+            const jsonViewBtn = document.getElementById('json-view-btn');
+            
+            // Function to validate MAC address format
+            function isValidMACAddress(mac) {
+                // Remove separators and check if it's a valid MAC
+                const cleanMac = mac.replace(/[:\-\.]/g, '');
+                
+                // Check if it's a valid length (12 hex characters)
+                if (cleanMac.length !== 12) {
+                    return false;
+                }
+                
+                // Check if it contains only hex characters
+                return /^[0-9A-Fa-f]{12}$/.test(cleanMac);
+            }
+            
+            // Switch between table and JSON views
+            tableViewBtn.addEventListener('click', function() {
+                tableViewBtn.classList.add('active');
+                jsonViewBtn.classList.remove('active');
+                endpointTable.style.display = 'table';
+                jsonViewer.style.display = 'none';
+            });
+            
+            jsonViewBtn.addEventListener('click', function() {
+                jsonViewBtn.classList.add('active');
+                tableViewBtn.classList.remove('active');
+                jsonViewer.style.display = 'block';
+                endpointTable.style.display = 'none';
+            });
+            
+            // Function to generate a table from endpoint data
+            function generateTable(data) {
+                endpointTable.innerHTML = '';
+                
+                // Create table header
+                const thead = document.createElement('thead');
+                const headerRow = document.createElement('tr');
+                const keyHeader = document.createElement('th');
+                keyHeader.textContent = 'Property';
+                const valueHeader = document.createElement('th');
+                valueHeader.textContent = 'Value';
+                headerRow.appendChild(keyHeader);
+                headerRow.appendChild(valueHeader);
+                thead.appendChild(headerRow);
+                endpointTable.appendChild(thead);
+                
+                // Create table body
+                const tbody = document.createElement('tbody');
+                
+                // Function to recursively add nested objects to the table
+                function addRowsForObject(obj, prefix = '') {
+                    for (const key in obj) {
+                        if (obj.hasOwnProperty(key)) {
+                            const row = document.createElement('tr');
+                            const keyCell = document.createElement('td');
+                            const valueCell = document.createElement('td');
+                            
+                            const displayKey = prefix ? `${prefix}.${key}` : key;
+                            keyCell.textContent = displayKey;
+                            
+                            const value = obj[key];
+                            
+                            if (value === null || value === undefined) {
+                                valueCell.textContent = 'N/A';
+                            } else if (typeof value === 'object' && !Array.isArray(value)) {
+                                // For nested objects, add a placeholder and recursively add rows
+                                valueCell.textContent = '{...}';
+                                addRowsForObject(value, displayKey);
+                            } else if (Array.isArray(value)) {
+                                valueCell.textContent = JSON.stringify(value);
+                            } else {
+                                valueCell.textContent = value;
+                            }
+                            
+                            row.appendChild(keyCell);
+                            row.appendChild(valueCell);
+                            tbody.appendChild(row);
+                        }
+                    }
+                }
+                
+                addRowsForObject(data);
+                endpointTable.appendChild(tbody);
+            }
+            
+            // Event listener for the lookup button
+            lookupButton.addEventListener('click', function() {
+                const macAddress = macAddressInput.value.trim();
+                
+                // Validate the MAC address
+                if (!isValidMACAddress(macAddress)) {
+                    showMessage('Please enter a valid MAC address', 'error');
+                    return;
+                }
+                
+                // Disable the button during the request
+                lookupButton.disabled = true;
+                lookupButton.textContent = 'Looking up...';
+                
+                // Hide previous results
+                endpointTable.style.display = 'none';
+                jsonViewer.style.display = 'none';
+                viewToggle.style.display = 'none';
+                
+                // Send the request to the API
+                fetch(`/api/get-endpoint?mac_address=${encodeURIComponent(macAddress)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        if (Object.keys(data.data).length === 0) {
+                            showMessage('No endpoint found with this MAC address', 'error');
+                        } else {
+                            showMessage(data.message, 'success');
+                            
+                            // Display the data
+                            generateTable(data.data);
+                            jsonViewer.textContent = JSON.stringify(data.data, null, 2);
+                            
+                            // Show the view toggle and default to table view
+                            viewToggle.style.display = 'block';
+                            endpointTable.style.display = 'table';
+                            jsonViewer.style.display = 'none';
+                            tableViewBtn.classList.add('active');
+                            jsonViewBtn.classList.remove('active');
+                        }
+                    } else {
+                        showMessage(`Error: ${data.message}`, 'error');
+                    }
+                })
+                .catch(error => {
+                    showMessage(`An error occurred: ${error.message}`, 'error');
+                })
+                .finally(() => {
+                    // Re-enable the button
+                    lookupButton.disabled = false;
+                    lookupButton.textContent = 'Lookup Endpoint';
+                });
+            });
+            
+            // Function to show success or error messages
+            function showMessage(message, type) {
+                resultMessage.textContent = message;
+                resultMessage.className = ''; // Clear previous classes
+                resultMessage.classList.add(type);
+                resultMessage.style.display = 'block';
+                
+                // Hide the message after 5 seconds if it's a success message
+                if (type === 'success') {
+                    setTimeout(() => {
+                        resultMessage.style.display = 'none';
+                        resultMessage.className = '';
+                    }, 5000);
+                }
+            }
+        });
+    </script>
+</body>
+</html>
