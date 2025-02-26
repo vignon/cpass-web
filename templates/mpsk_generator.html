@@ -6,25 +6,6 @@
     <title>Wireless MPSK Registration</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     <style>
-        .password-container {
-            margin-top: 20px;
-            padding: 15px;
-            background-color: #f0f8ff;
-            border-radius: 5px;
-            border: 1px solid #b0c4de;
-            display: none;
-        }
-
-        .password-box {
-            font-family: monospace;
-            font-size: 18px;
-            padding: 10px;
-            background-color: #ffffff;
-            border: 1px solid #ddd;
-            border-radius: 3px;
-            margin: 10px 0;
-        }
-
         .nav-links {
             text-align: center;
             margin-bottom: 20px;
@@ -70,39 +51,31 @@
             to { transform: rotate(360deg); }
         }
 
+        #password-result {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f0f8ff;
+            border: 1px solid #b0c4de;
+            border-radius: 5px;
+            display: none;
+        }
+
+        .password-display {
+            font-family: monospace;
+            font-size: 18px;
+            padding: 10px;
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            word-break: break-all;
+        }
+
         .copy-btn {
+            margin-top: 10px;
             background-color: #4CAF50;
-            border: none;
             color: white;
-            padding: 8px 12px;
-            text-align: center;
-            text-decoration: none;
-            display: inline-block;
-            font-size: 14px;
-            margin: 4px 2px;
-            cursor: pointer;
-            border-radius: 4px;
-        }
-
-        .input-group {
-            display: flex;
-            margin-bottom: 10px;
-        }
-
-        .input-group input {
-            flex: 1;
-            margin-right: 10px;
-        }
-
-        .input-group button {
-            background-color: #6c757d;
             border: none;
-            color: white;
             padding: 8px 12px;
-            text-align: center;
-            text-decoration: none;
-            display: inline-block;
-            font-size: 14px;
             border-radius: 4px;
             cursor: pointer;
         }
@@ -125,8 +98,6 @@
         <div class="card">
             <h2>Register Device with MPSK</h2>
 
-            <p>Enter the MAC address and email to register a new device and generate an MPSK password.</p>
-
             <div class="form-group">
                 <label for="mac-address">MAC Address:</label>
                 <input type="text" id="mac-address" placeholder="Enter MAC address (e.g., 00:11:22:33:44:55)" required>
@@ -144,30 +115,20 @@
                 <small>Example: John's iPhone, Living Room TV</small>
             </div>
 
-            <div class="form-group">
-                <label for="mpsk-password">MPSK Password:</label>
-                <div class="input-group">
-                    <input type="text" id="mpsk-password" readonly>
-                    <button type="button" id="regenerate-btn">Regenerate</button>
-                </div>
-                <small>This password will be used for the device's network connection.</small>
-            </div>
-
-            <button id="generate-btn">Register Device</button>
+            <button id="register-btn">Register Device</button>
 
             <div id="result-message" class="error"></div>
 
             <div id="loading" style="display: none; text-align: center; margin: 20px 0;">
                 <div class="loading"></div>
-                <p>Registering device and setting MPSK...</p>
+                <p>Registering device...</p>
             </div>
 
-            <div id="password-container" class="password-container">
-                <h3>Registration Complete</h3>
-                <p>Your device has been registered. Use this password to connect your device to the network:</p>
-                <div id="password-display" class="password-box"></div>
+            <div id="password-result">
+                <h3>Device Registered Successfully</h3>
+                <p>Here is your network access password:</p>
+                <div id="password-display" class="password-display"></div>
                 <button id="copy-btn" class="copy-btn">Copy Password</button>
-                <p><small>This password has been sent to your email address.</small></p>
             </div>
         </div>
     </div>
@@ -177,59 +138,12 @@
             const macAddressInput = document.getElementById('mac-address');
             const emailInput = document.getElementById('email');
             const deviceNameInput = document.getElementById('device-name');
-            const mpskPasswordInput = document.getElementById('mpsk-password');
-            const regenerateBtn = document.getElementById('regenerate-btn');
-            const generateBtn = document.getElementById('generate-btn');
+            const registerBtn = document.getElementById('register-btn');
             const resultMessage = document.getElementById('result-message');
             const loadingElement = document.getElementById('loading');
-            const passwordContainer = document.getElementById('password-container');
+            const passwordResult = document.getElementById('password-result');
             const passwordDisplay = document.getElementById('password-display');
             const copyBtn = document.getElementById('copy-btn');
-
-            // Fetch a random MPSK when the page loads
-            fetchRandomMPSK();
-
-            // Function to fetch a random MPSK
-            function fetchRandomMPSK() {
-                fetch('/random-mpsk')
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            // Display the generated password in the input field
-                            mpskPasswordInput.value = data.mpsk_password;
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error fetching random MPSK:', error);
-                        // Set a fallback password if fetch fails
-                        mpskPasswordInput.value = generateFallbackPassword();
-                    });
-            }
-
-            // Function to generate a fallback password if API call fails
-            function generateFallbackPassword() {
-                const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-_=+';
-                let password = '';
-                for (let i = 0; i < 20; i++) {
-                    password += chars.charAt(Math.floor(Math.random() * chars.length));
-                }
-                return password;
-            }
-
-            // Add event listener for regenerate button
-            regenerateBtn.addEventListener('click', function() {
-                fetch('/random-mpsk')
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            mpskPasswordInput.value = data.mpsk_password;
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error regenerating MPSK:', error);
-                        mpskPasswordInput.value = generateFallbackPassword();
-                    });
-            });
 
             // Function to validate MAC address format
             function isValidMACAddress(mac) {
@@ -250,12 +164,25 @@
                 return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
             }
 
-            // Add event listener for the generate button
-            generateBtn.addEventListener('click', function() {
+            // Copy password button
+            copyBtn.addEventListener('click', function() {
+                const password = passwordDisplay.textContent;
+                navigator.clipboard.writeText(password).then(function() {
+                    showMessage('Password copied to clipboard!', 'success');
+                }, function() {
+                    showMessage('Failed to copy password. Please select and copy manually.', 'error');
+                });
+            });
+
+            // Add event listener for the register button
+            registerBtn.addEventListener('click', function() {
                 const macAddress = macAddressInput.value.trim();
                 const email = emailInput.value.trim();
                 const deviceName = deviceNameInput.value.trim();
-                const mpskPassword = mpskPasswordInput.value.trim();
+
+                // Reset previous states
+                passwordResult.style.display = 'none';
+                resultMessage.style.display = 'none';
 
                 // Validate inputs
                 if (!macAddress) {
@@ -278,15 +205,6 @@
                     return;
                 }
 
-                if (!mpskPassword) {
-                    showMessage('No MPSK password generated. Please click Regenerate to get a new password.', 'error');
-                    return;
-                }
-
-                // Clear previous results
-                resultMessage.style.display = 'none';
-                passwordContainer.style.display = 'none';
-
                 // Show loading
                 loadingElement.style.display = 'block';
 
@@ -294,8 +212,7 @@
                 const data = {
                     mac_address: macAddress,
                     email: email,
-                    device_name: deviceName || `Device-${macAddress.replace(/[:\-\.]/g, '').slice(-6)}`,
-                    mpsk_password: mpskPassword
+                    device_name: deviceName || `Device-${macAddress.replace(/[:\-\.]/g, '').slice(-6)}`
                 };
 
                 // Make the request
@@ -312,17 +229,15 @@
                     loadingElement.style.display = 'none';
 
                     if (data.success) {
-                        // Show the generated password
+                        // Display the generated password
                         passwordDisplay.textContent = data.mpsk_password;
-                        passwordContainer.style.display = 'block';
-                        showMessage('Device successfully registered with MPSK!', 'success');
+                        passwordResult.style.display = 'block';
+                        showMessage('Device successfully registered!', 'success');
 
-                        // Clear form fields for next registration
+                        // Clear form fields
                         macAddressInput.value = '';
+                        emailInput.value = '';
                         deviceNameInput.value = '';
-
-                        // Get a new password for the next registration
-                        fetchRandomMPSK();
                     } else {
                         showMessage(`Error: ${data.message}`, 'error');
                     }
@@ -331,16 +246,6 @@
                     // Hide loading
                     loadingElement.style.display = 'none';
                     showMessage(`An error occurred: ${error.message}`, 'error');
-                });
-            });
-
-            // Copy password button
-            copyBtn.addEventListener('click', function() {
-                const password = passwordDisplay.textContent;
-                navigator.clipboard.writeText(password).then(function() {
-                    showMessage('Password copied to clipboard!', 'success');
-                }, function() {
-                    showMessage('Failed to copy password. Please select and copy manually.', 'error');
                 });
             });
 
