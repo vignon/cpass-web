@@ -657,5 +657,36 @@ def api_generate_mpsk():
             }
         })
 
+
+@app.route('/random-mpsk', methods=['GET', 'POST'])
+def random_mpsk():
+    """Generate a random MPSK password."""
+    from api.clearpass import generate_pronounceable_mpsk
+
+    # Generate a new pronounceable password
+    mpsk_password = generate_pronounceable_mpsk(20)
+
+    # If it's a GET request, return the password as JSON
+    if request.method == 'GET':
+        return jsonify({
+            "success": True,
+            "mpsk_password": mpsk_password
+        })
+
+    # If it's a POST request, you can also process additional parameters
+    elif request.method == 'POST':
+        # You can parse any parameters sent in the request
+        data = request.json or {}
+        length = data.get('length', 20)  # Default to 20 if not specified
+
+        # Generate with the specified length
+        mpsk_password = generate_pronounceable_mpsk(length)
+
+        return jsonify({
+            "success": True,
+            "mpsk_password": mpsk_password,
+            "parameters": data
+        })
+
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
