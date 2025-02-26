@@ -277,106 +277,114 @@ def get_static_host_lists():
     print("Could not extract host lists from response format")
     return []
 
+
 def search_mac_across_all_static_host_lists(mac_address):
     """Search for a MAC address across all static host lists."""
     # Get OAuth token
     token = get_clearpass_token()
-    
-    # Format the MAC address if needed
-    mac = mac_address.replace(':', '').replace('-', '').replace('.', '')
-    
-    # Format MAC with colons (xx:xx:xx:xx:xx:xx)
-    formatted_mac = ':'.join([mac[i:i+2] for i in range(0, len(mac), 2)])
-    
-    # Get all static host lists
-    all_host_lists = get_static_host_lists()
-    
-    if not all_host_lists:
+
+    # Format the MAC address for comparison (remove separators)
+    normalized_mac = mac_address.replace(':', '').replace('-', '').replace('.', '').lower()
+
+    # Base URL for API requests
+    base_url = os.getenv("CLEARPASS_BASE_URL").rstrip('/')
+    if not base_url.endswith('/api'):
+        base_url = f"{base_url}/api"
+
+    # First, get a list of all static host lists
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json"
+    }
+
+    # Use the singular endpoint as you suggested
+    static_lists_url = f"{base_url}/static-host-list"
+
+    try:
+        response = requests.get(
+            static_lists_url,
+            headers=headers,
+            verify=False
+        )
+
+        if response.status_code != 200:
+            return {
+                "success": False,
+                "message": f"Failed to retrieve static host lists: {response.status_code}",
+                "matches": []
+            }
+
+        static_lists = response.json()
+
+        # Extract list of static host lists, adapting to response format
+        host_lists = []
+
+        # Check for different possible response structures
+        if '_embedded' in static_lists and 'items' in static_lists['_embedded']:
+            host_lists = static_lists['_embedded']['items']
+        elif isinstance(static_lists, list):
+            host_lists = static_lists
+
+        if not host_lists:
+            return {
+                "success": False,
+                "message": "No static host lists found",
+                "matches": []
+            }
+
+        # Now search each list for the MAC address
+        matches = []
+
+        for host_list in host_lists:
+            list_id = host_list.get('id')
+            list_name = host_list.get('name', 'Unknown')
+
+            # Get the details for this specific list
+            list_url = f"{base_url}/static-host-list/{list_id}"
+            list_response = requests.get(
+                list_url,
+                headers=headers,
+                verify=False
+            )
+
+            if list_response.status_code != 200:
+                continue
+
+            list_details = list_response.json()
+
+            # Check host_entries first (as you indicated this is where MACs are stored)
+            if 'host_entries' in list_details:
+                for entry in list_details['host_entries']:
+                    if 'host_address' in entry:
+                        host_mac = entry['host_address'].replace(':', '').replace('-', '').replace('.', '').lower()
+
+                        if host_mac == normalized_mac:
+                            matches.append({
+                                "list_id": list_id,
+                                "list_name": list_name,
+                                "mac_address": entry['host_address'],
+                                "description": entry.get('host_address_desc', '')
+                            })
+
+        # Return results
+        if matches:
+            return {
+                "success": True,
+                "message": f"Found MAC address in {len(matches)} static host list(s)",
+                "matches": matches
+            }
+        else:
+            return {
+                "success": True,
+                "message": "MAC address not found in any static host list",
+                "matches": []
+            }
+
+    except Exception as e:
         return {
             "success": False,
-            "message": "Could not retrieve static host lists",
+            "message": f"Error searching for MAC address: {str(e)}",
             "matches": []
-        }
-    
-    # Results will contain list of matches with their list details
-    matches = []
-    search_errors = []
-    
-    # Print the MAC we're searching for in all formats to help with debugging
-    print(f"Searching for MAC: {mac_address}")
-    print(f"Normalized MAC: {mac}")
-    print(f"Formatted MAC with colons: {formatted_mac}")
-    print(f"Formatted MAC with hyphens: {'-'.join([mac[i:i+2] for i in range(0, len(mac), 2)])}")
-    
-    # Iterate through each host list and check for the MAC
-    print(f"Checking {len(all_host_lists)} static host lists")
-    for host_list_info in all_host_lists:
-        list_id = host_list_info.get('id')
-        list_name = host_list_info.get('name', 'Unknown')
-        
-        if not list_id:
-            print(f"Skipping list with no ID: {list_name}")
-            continue
-            
-        print(f"Searching list: {list_name} (ID: {list_id})")
-        
-        try:
-            # Search for MAC in this specific list
-            result = search_static_host_list(list_id, mac_address)
-            
-            if result.get("found", False):
-                print(f"Found match in list: {list_name} (ID: {list_id})")
-                # If found, add to matches with list details
-                for host in result.get("hosts", []):
-                    # Ensure we get the original MAC format from the host record
-                    original_mac = host.get("mac_address", formatted_mac)
-                    print(f"Adding match: {original_mac} from list {list_name}")
-                    matches.append({
-                        "list_id": list_id,
-                        "list_name": list_name,
-                        "mac_address": original_mac,
-                        "description": host.get("description", ""),
-                        "other_details": {k: v for k, v in host.items() if k not in ["mac_address", "description"]}
-                    })
-            else:
-                print(f"No match found in list: {list_name} (ID: {list_id})")
-        except Exception as e:
-            print(f"Error searching list {list_name} (ID: {list_id}): {str(e)}")
-            search_errors.append(f"Error with list {list_name}: {str(e)}")
-    
-    # Return the final results
-    if matches:
-        print(f"Search complete. Found {len(matches)} matches.")
-        return {
-            "success": True,
-            "message": f"Found MAC address {formatted_mac} in {len(matches)} static host list(s)",
-            "matches": matches,
-            "search_errors": search_errors if search_errors else None,
-            "search_info": {
-                "mac_formats": {
-                    "original": mac_address,
-                    "normalized": mac,
-                    "colon_format": formatted_mac,
-                    "hyphen_format": '-'.join([mac[i:i+2] for i in range(0, len(mac), 2)])
-                }
-            }
-        }
-    else:
-        print(f"Search complete. No matches found.")
-        return {
-            "success": True,
-            "message": f"MAC address {formatted_mac} was not found in any static host list",
-            "matches": [],
-            "search_errors": search_errors if search_errors else None,
-            "search_info": {
-                "mac_formats": {
-                    "original": mac_address,
-                    "normalized": mac,
-                    "colon_format": formatted_mac,
-                    "hyphen_format": '-'.join([mac[i:i+2] for i in range(0, len(mac), 2)])
-                },
-                "lists_searched": len(all_host_lists)
-            }
         }
 
 def search_static_host_list(list_id, mac_address):
